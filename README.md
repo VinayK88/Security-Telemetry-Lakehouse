@@ -275,8 +275,7 @@ security-telemetry-lakehouse/
 │   ├── test_pipeline.py
 │   └── test_features.py
 ├── docs/
-│   ├── production-architecture.md
-│   └── interview-walkthrough.md
+│   └── production-architecture.md
 ├── data/
 │   └── .gitkeep
 ├── Dockerfile
