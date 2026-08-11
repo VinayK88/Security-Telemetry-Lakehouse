@@ -1,112 +1,182 @@
+<div align="center">
+
 # Security Telemetry Lakehouse
 
-> **Turn massive security telemetry into normalized, queryable, detection-ready signals.**
+### From noisy security events to explainable, detection-ready signals
 
-A defensive, GitHub-ready reference implementation for a security telemetry platform designed around the same engineering problems that appear at very large scale: schema normalization, deduplication, late-arriving events, partitioning, behavioral aggregation, anomaly scoring, observability, and cost-aware storage tiers.
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](Dockerfile)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Data](https://img.shields.io/badge/Data-synthetic%20only-7B61FF)](#safety)
 
-The default demo runs locally with Python + SQLite so anyone can evaluate it in minutes. The repository also documents how the same contracts map to Kafka / Spark / object storage / BigQuery or ClickHouse in production.
+**Normalize · deduplicate · watermark · aggregate · detect**
 
-## Why this project exists
+[Quick start](#quick-start) · [Live API walkthrough](#api-walkthrough) · [Architecture](#architecture) · [Scale-out design](#scaling-beyond-the-local-demo)
 
-Security platforms routinely ingest endpoint, identity, DNS, proxy, cloud, SaaS, and authentication telemetry at enormous volume. The hard part is not simply "put events in Kafka." The platform must preserve correctness while keeping latency and cost under control.
+</div>
 
-This project demonstrates a concrete answer to:
+---
 
-> **How would you process billions of security telemetry events per day?**
+A defensive reference implementation of a security telemetry pipeline. It turns synthetic endpoint, identity, DNS, cloud, and SaaS events into a canonical schema, hourly behavioral features, and explainable findings.
+
+The complete demo runs locally with **Python + SQLite** and requires no cloud account. The same data contracts can be carried into Kafka, Flink or Spark, object storage, ClickHouse, or BigQuery.
+
+## Why this project?
+
+At security-platform scale, ingestion is only the beginning. Events arrive twice, arrive late, use different schemas, and create expensive state. This project makes those engineering trade-offs visible and testable.
+
+| Challenge | What this project demonstrates |
+| --- | --- |
+| Inconsistent source schemas | One validated `SecurityEvent` contract |
+| Duplicate delivery | Deterministic IDs and idempotent inserts |
+| Offline or delayed sources | Separate event/ingest time and an explicit lateness watermark |
+| High-volume raw telemetry | Partition-aware storage and tiering guidance |
+| Noisy individual events | Hourly principal-level feature windows |
+| Black-box alerts | Transparent scoring with human-readable reasons |
 
 ## Architecture
 
-```text
-Endpoint / Identity / DNS / SaaS / Cloud / Proxy
-                     |
-                     v
-              Event Ingestion
-                     |
-                     v
-          Canonical Normalization
-                     |
-          +----------+-----------+
-          |                      |
-          v                      v
-      Deduplication          Dead Letter
-          |
-          v
-      Event-time Watermark
-          |
-          v
-    Partitioned Raw Telemetry
-    date/source/hour partitions
-          |
-          v
-    Behavioral Aggregations
- user / device / IP / app windows
-          |
-          v
-       Detection Layer
-  anomaly + policy + heuristics
-          |
-          v
-        FastAPI
-          |
-          v
-  Analyst / SOC / dashboards
+```mermaid
+flowchart LR
+    subgraph Sources
+        EDR["Endpoint / EDR"]
+        IDP[Identity]
+        DNS["DNS / Proxy"]
+        CLD["Cloud / SaaS"]
+    end
+
+    EDR & IDP & DNS & CLD --> ING[Ingestion]
+    ING --> NORM["Normalize + validate"]
+    NORM -->|valid| DEDUP[Deduplicate]
+    NORM -->|malformed| DLQ[("Dead-letter queue")]
+    DEDUP --> TIME[Event-time watermark]
+    TIME --> RAW[("Raw event store")]
+    RAW --> FEAT[Hourly behavior features]
+    FEAT --> SCORE[Explainable scorer]
+    SCORE --> FIND[("Findings")]
+    RAW & FEAT & FIND --> API["FastAPI + browser demo"]
 ```
 
-## What the MVP implements
+### One event's journey
 
-- Canonical security event schema
-- Synthetic endpoint, identity, DNS, cloud, and SaaS telemetry
-- Deterministic event IDs
-- Deduplication
-- Event-time vs ingestion-time handling
-- Configurable lateness watermark
-- Dead-letter handling for malformed events
-- Partition-aware local storage
-- Hourly behavioral feature aggregation
-- Baseline anomaly scoring
-- Detection findings with explanations
-- Pipeline health metrics
-- FastAPI endpoints
-- Browser demo
-- Unit tests
-- Dockerfile
-- Production scaling design notes
+```mermaid
+sequenceDiagram
+    participant S as Telemetry source
+    participant P as Pipeline
+    participant L as Lakehouse store
+    participant D as Detection layer
+    participant A as Analyst
+
+    S->>P: Raw identity event
+    P->>P: Validate and normalize
+    P->>L: Check deterministic event_id
+    alt event already exists
+        L-->>P: Duplicate — skip safely
+    else new event
+        P->>L: Persist normalized event
+        P->>P: Place into event-time window
+        P->>D: Build behavior features
+        D->>L: Store finding + reason
+        A->>L: Query /findings
+    end
+```
+
+## What is included
+
+- Canonical Pydantic event models
+- Deterministic synthetic telemetry generator
+- Normalization, validation, and dead-letter handling
+- Deduplication and late-event accounting
+- SQLite-backed local event and finding storage
+- Hourly features for identities and devices
+- Explainable baseline detection scoring
+- FastAPI endpoints and a zero-build browser demo
+- Unit tests, Dockerfile, and production design notes
 
 ## Quick start
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+### 1. Install
 
+```bash
+git clone https://github.com/VinayK88/Security-Telemetry-Lakehouse.git
+cd Security-Telemetry-Lakehouse
+
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### 2. Run the deterministic CLI demo
+
+```bash
+python scripts/run_demo.py --events 10000 --seed 42
+```
+
+The command creates `data/demo-lakehouse.db`, prints pipeline metrics, and shows the ten highest-risk findings.
+
+### 3. Start the API and UI
+
+```bash
 uvicorn app.main:app --reload
 ```
 
-Open:
+| Destination | URL |
+| --- | --- |
+| Browser demo | <http://localhost:8000> |
+| Interactive OpenAPI docs | <http://localhost:8000/docs> |
+| Raw OpenAPI schema | <http://localhost:8000/openapi.json> |
 
-```text
-http://localhost:8000
-```
-
-API documentation:
-
-```text
-http://localhost:8000/docs
-```
-
-Generate and ingest 10,000 synthetic events:
+### Docker alternative
 
 ```bash
-python scripts/run_demo.py --events 10000
+docker build -t security-telemetry-lakehouse .
+docker run --rm -p 8000:8000 security-telemetry-lakehouse
 ```
 
-Run tests:
+## API walkthrough
+
+With the server running, generate and ingest 1,000 deterministic events:
 
 ```bash
-python -m unittest discover -s tests -v
+curl -sS -X POST http://localhost:8000/demo/ingest \
+  -H 'Content-Type: application/json' \
+  -d '{"events": 1000, "seed": 42}' | python -m json.tool
 ```
 
-## Example event
+The response is a cumulative pipeline scorecard:
+
+| Field | Meaning |
+| --- | --- |
+| `received` | Events presented to this API process |
+| `accepted` | New normalized events written to SQLite |
+| `duplicates` | Events skipped because the deterministic ID already exists |
+| `late_events` | Events older than the 30-minute watermark |
+| `dead_letter` | Records that failed normalization or validation |
+| `findings` | Findings produced by the latest analytics refresh |
+
+> Counts can differ when the API has already ingested data because the in-process metrics and SQLite store retain state.
+
+Inspect the results:
+
+```bash
+# Pipeline health
+curl -sS http://localhost:8000/metrics | python -m json.tool
+
+# Highest-risk findings
+curl -sS 'http://localhost:8000/findings?limit=5' | python -m json.tool
+
+# Recent feature windows and normalized events
+curl -sS 'http://localhost:8000/features?limit=5' | python -m json.tool
+curl -sS 'http://localhost:8000/events?limit=5' | python -m json.tool
+
+# Malformed records and their validation errors
+curl -sS 'http://localhost:8000/dead-letter?limit=5' | python -m json.tool
+```
+
+## Data examples
+
+### Normalized event
 
 ```json
 {
@@ -119,226 +189,137 @@ python -m unittest discover -s tests -v
   "device_id": "mac-fin-014",
   "src_ip": "203.0.113.24",
   "action": "login",
-  "outcome": "success",
-  "risk": 0.14
+  "outcome": "failure",
+  "risk": 0.74,
+  "attributes": {}
 }
 ```
 
-## Example analytic
-
-The feature layer can derive observations like:
-
-```text
-finance.user@example.com
-  logins_last_hour:       18
-  distinct_ips:            7
-  failed_logins:          11
-  countries_seen:          4
-  sensitive_actions:       2
-```
-
-The baseline scorer can then produce:
-
-```text
-Finding: unusual_identity_behavior
-Score:   0.89
-
-Why:
-- failed login count is 4.1x baseline
-- distinct source IPs is 3.5x baseline
-- privileged activity occurred in the same window
-```
-
-## Scaling to billions of events
-
-The local implementation intentionally keeps infrastructure small, but the contracts are production-oriented.
-
-### Ingestion
-
-At large scale:
-
-```text
-Producers
-   |
-   v
-Regional Kafka / Pub/Sub
-   |
-   +--> validation / normalization
-   |
-   +--> replayable raw topic
-```
-
-Partition by a high-cardinality routing key such as tenant + source + time bucket rather than by a single user, which can create hot partitions.
-
-### Stream processing
-
-Use Spark Structured Streaming, Flink, Dataflow, or Kafka Streams for:
-
-- schema normalization
-- deduplication
-- event-time windows
-- watermarking
-- enrichment
-- feature computation
-- routing
-
-Stateful operators should use bounded TTLs and checkpointing.
-
-### Storage tiers
-
-```text
-HOT
-ClickHouse / BigQuery / Elasticsearch
-hours to days
-
-WARM
-Parquet / Delta / Iceberg
-days to months
-
-COLD
-compressed object storage
-months to years
-```
-
-Raw immutable events should be retained separately from enriched or aggregated datasets so the system can replay history when detection logic changes.
-
-### Partitioning
-
-A common layout:
-
-```text
-/security_events/
-    event_date=2026-08-10/
-      source=entra/
-        hour=10/
-          part-0001.parquet
-```
-
-Avoid excessively small partitions. Compaction should merge small files asynchronously.
-
-### Exactly-once thinking
-
-Perfect exactly-once delivery across a distributed system is often expensive. A more practical pattern is:
-
-```text
-at-least-once delivery
-        +
-deterministic event IDs
-        +
-idempotent sinks
-        +
-deduplication windows
-```
-
-### Late events
-
-Security events frequently arrive late because endpoints are offline or upstream systems batch data.
-
-Track both:
-
-```text
-event_time
-ingest_time
-```
-
-and define explicit watermarks so late telemetry is handled deterministically rather than silently dropped.
-
-### Cost controls
-
-At very large scale:
-
-- aggregate before long-term storage when raw fidelity is not required
-- compress columnar data
-- tier old data
-- separate interactive and archival workloads
-- avoid indexing every field
-- sample low-value diagnostic telemetry
-- retain high-value security events at full fidelity
-
-## Repository structure
-
-```text
-security-telemetry-lakehouse/
-├── app/
-│   ├── __init__.py
-│   ├── main.py
-│   ├── models.py
-│   ├── normalize.py
-│   ├── pipeline.py
-│   ├── storage.py
-│   ├── features.py
-│   ├── detection.py
-│   └── generator.py
-├── scripts/
-│   └── run_demo.py
-├── tests/
-│   ├── test_pipeline.py
-│   └── test_features.py
-├── docs/
-│   └── production-architecture.md
-├── data/
-│   └── .gitkeep
-├── Dockerfile
-├── requirements.txt
-├── SECURITY.md
-├── CONTRIBUTING.md
-├── LICENSE
-└── .gitignore
-```
-
-## API
-
-### `POST /demo/ingest`
-
-Generate and ingest synthetic telemetry.
+### Derived feature window
 
 ```json
 {
-  "events": 5000,
-  "seed": 42
+  "principal": "finance.user@example.com",
+  "window_start": "2026-08-10T10:00:00+00:00",
+  "event_count": 18,
+  "failed_logins": 11,
+  "distinct_ips": 7,
+  "sensitive_actions": 2,
+  "average_risk": 0.61
 }
 ```
 
-### `GET /metrics`
+### Explainable finding
 
-Pipeline metrics.
+```json
+{
+  "principal": "finance.user@example.com",
+  "finding_type": "unusual_identity_behavior",
+  "score": 0.9415,
+  "reason": "11 failed events; 7 distinct source IPs; 2 sensitive actions; average event risk 0.61",
+  "window_start": "2026-08-10T10:00:00+00:00"
+}
+```
 
-### `GET /findings`
+The baseline score is intentionally easy to audit:
 
-Highest-risk findings.
+| Signal | Weight | Saturates at |
+| --- | ---: | ---: |
+| Failed events | 35% | 10 events |
+| Distinct source IPs beyond the first | 25% | 6 IPs |
+| Sensitive actions | 25% | 2 actions |
+| Average source-event risk | 15% | 1.0 |
 
-### `GET /features`
+A feature window becomes a finding when its combined score is **at least 0.35**. Production systems should learn per-tenant or per-entity baselines and calibrate thresholds with labeled outcomes.
 
-Recent behavioral feature windows.
+## Correctness behaviors to try
 
-### `GET /events`
+These behaviors are covered by the tests and are useful when exploring the code:
 
-Recent normalized events.
+1. Send the same `event_id` twice — the second event increments `duplicates`.
+2. Send an event older than the allowed watermark — it increments `late_events` but remains queryable.
+3. Omit required event fields — the record is routed to the in-memory dead-letter collection.
+4. Generate repeated failed logins across several IPs — an explainable identity finding is produced.
 
-## Production roadmap
+Run the test suite:
 
-- Kafka / Pub/Sub ingestion adapter
+```bash
+python -m unittest discover -s tests -v
+```
+
+## Repository map
+
+```text
+.
+├── app/
+│   ├── main.py          # FastAPI routes and browser demo
+│   ├── models.py        # Event, feature, metric, and finding contracts
+│   ├── normalize.py     # Source normalization and deterministic IDs
+│   ├── pipeline.py      # Validation, deduplication, watermarking
+│   ├── storage.py       # SQLite-backed local lakehouse
+│   ├── features.py      # Hourly behavioral aggregation
+│   ├── detection.py     # Transparent baseline scoring
+│   └── generator.py     # Deterministic synthetic telemetry
+├── scripts/run_demo.py
+├── tests/
+├── docs/production-architecture.md
+├── Dockerfile
+└── requirements.txt
+```
+
+## Scaling beyond the local demo
+
+The local components are deliberately small; the contracts are designed to map to distributed equivalents.
+
+| Local component | Production option | Contract that stays the same |
+| --- | --- | --- |
+| Python event generator | EDR, IdP, DNS, cloud, and SaaS collectors | Canonical event fields |
+| In-process pipeline | Flink, Spark Structured Streaming, Dataflow | Normalize → deduplicate → watermark |
+| SQLite | ClickHouse, BigQuery, Elasticsearch | Queryable hot data |
+| Local rows | Parquet + Iceberg or Delta | Replayable raw history |
+| Python feature builder | Stateful stream processor / feature service | Windowed entity features |
+| FastAPI | Horizontally scaled service | Analyst-facing query contract |
+
+```mermaid
+flowchart TB
+    K["Kafka / Pub/Sub"] --> SP["Streaming processor"]
+    SP --> HOT[("HOT<br/>ClickHouse / BigQuery<br/>hours–days")]
+    SP --> WARM[("WARM<br/>Parquet + Iceberg / Delta<br/>days–months")]
+    WARM --> COLD[("COLD<br/>Compressed object storage<br/>months–years")]
+    HOT --> ANALYTICS["Interactive detections"]
+    WARM --> REPLAY["Replay + backfill"]
+    COLD --> FORENSICS["Long-term forensics"]
+```
+
+Key production principles:
+
+- Prefer at-least-once delivery plus deterministic IDs and idempotent sinks.
+- Retain immutable raw events separately from enriched and aggregated data.
+- Partition with tenant/source/time-aware routing keys; monitor hot partitions.
+- Bound state with watermarks, TTLs, and checkpointing.
+- Compact small files asynchronously and avoid indexing every field.
+- Track lag, timestamp skew, null rates, schema drift, and cost per million events.
+
+See [Production Architecture](docs/production-architecture.md) for the extended design notes.
+
+## Roadmap
+
+- Kafka or Pub/Sub ingestion adapter
 - Spark Structured Streaming implementation
-- Iceberg / Delta / BigQuery sink
-- OCSF-compatible schema adapter
-- schema registry support
-- tenant isolation
-- entity resolution
-- ATT&CK enrichment
-- streaming feature store
-- ML-based anomaly detection
-- graph-ready security entities
-- OpenTelemetry metrics
-- backpressure controller
-- replay / backfill orchestrator
-- data quality SLAs
+- Iceberg, Delta, or BigQuery sink
+- OCSF-compatible schema adapter and schema registry
+- Tenant isolation and entity resolution
+- ATT&CK enrichment and streaming feature store
+- OpenTelemetry metrics, replay orchestration, and data-quality SLAs
 
-## Security
+## Safety
 
-This repository is defensive and uses synthetic telemetry. It does not exploit systems or provide offensive capabilities.
+This repository is for defensive engineering and uses synthetic telemetry. It does not exploit systems or provide offensive capabilities. See [SECURITY.md](SECURITY.md).
 
-See [SECURITY.md](SECURITY.md).
+## Contributing
+
+Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md), keep example data synthetic, and run the tests before opening a pull request.
 
 ## License
 
-MIT.
+Distributed under the [MIT License](LICENSE).
