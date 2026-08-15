@@ -22,6 +22,16 @@ A defensive reference implementation of a security telemetry pipeline. It turns 
 
 The complete demo runs locally with **Python + SQLite** and requires no cloud account. The same data contracts can be carried into Kafka, Flink or Spark, object storage, ClickHouse, or BigQuery.
 
+## 60-second reviewer path
+
+Short on time? Review the project in this order:
+
+1. [Understand the telemetry problem](#why-this-project).
+2. [Follow one event through the architecture](#architecture).
+3. [Inspect the implemented pipeline](#what-is-included).
+4. [Review the analyst API workflow](#api-walkthrough).
+5. [Run the deterministic demo](#quick-start).
+
 ## Why this project?
 
 At security-platform scale, ingestion is only the beginning. Events arrive twice, arrive late, use different schemas, and create expensive state. This project makes those engineering trade-offs visible and testable.
