@@ -18,6 +18,8 @@
 
 ---
 
+![Security Telemetry Lakehouse dashboard preview](assets/dashboard-preview.svg)
+
 A defensive reference implementation of a security telemetry pipeline. It turns synthetic endpoint, identity, DNS, cloud, and SaaS events into a canonical schema, hourly behavioral features, and explainable findings.
 
 The complete demo runs locally with **Python + SQLite** and requires no cloud account. The same data contracts can be carried into Kafka, Flink or Spark, object storage, ClickHouse, or BigQuery.
